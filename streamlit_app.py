@@ -7,6 +7,8 @@ import seaborn as sns
 from scipy.stats import pearsonr
 import plotly.express as px
 import plotly.graph_objects as go
+from io import BytesIO
+import base64
 
 
 def calculate_pearson_correlation(data_array, col_a='A', col_b='B'):
@@ -37,7 +39,84 @@ def calculate_pearson_correlation(data_array, col_a='A', col_b='B'):
         return None, None, f"Error calculating correlation: {str(e)}"
 
 
-def analyze_json_structure(data):
+def create_download_link(df, filename, file_format):
+    """
+    Create a download link for the dataframe
+    """
+    if file_format == 'csv':
+        csv = df.to_csv(index=False)
+        b64 = base64.b64encode(csv.encode()).decode()
+        href = f'<a href="data:file/csv;base64,{b64}" download="{filename}.csv">📥 Download CSV</a>'
+        return href
+    elif file_format == 'excel':
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Data')
+        excel_data = output.getvalue()
+        b64 = base64.b64encode(excel_data).decode()
+        href = f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="{filename}.xlsx">📥 Download Excel</a>'
+        return href
+
+
+def safe_create_scatter_plot(df, col_a, col_b, show_trendline=True):
+    """
+    Create scatter plot with error handling for trendline
+    """
+    try:
+        if show_trendline:
+            fig = px.scatter(
+                df,
+                x=col_a,
+                y=col_b,
+                title=f"Scatter Plot: {col_a} vs {col_b}",
+                trendline="ols"
+            )
+        else:
+            # Fallback without trendline
+            fig = px.scatter(
+                df,
+                x=col_a,
+                y=col_b,
+                title=f"Scatter Plot: {col_a} vs {col_b}"
+            )
+
+            # Add manual trendline using numpy
+            z = np.polyfit(df[col_a], df[col_b], 1)
+            p = np.poly1d(z)
+            x_trend = np.linspace(df[col_a].min(), df[col_a].max(), 100)
+
+            fig.add_trace(go.Scatter(
+                x=x_trend,
+                y=p(x_trend),
+                mode='lines',
+                name='Trend Line',
+                line=dict(color='red', dash='dash')
+            ))
+
+        fig.update_layout(
+            xaxis_title=col_a,
+            yaxis_title=col_b,
+            showlegend=True
+        )
+
+        return fig, None
+
+    except Exception as e:
+        # Create simple scatter plot without trendline as fallback
+        fig = px.scatter(
+            df,
+            x=col_a,
+            y=col_b,
+            title=f"Scatter Plot: {col_a} vs {col_b} (No Trendline)"
+        )
+
+        fig.update_layout(
+            xaxis_title=col_a,
+            yaxis_title=col_b,
+            showlegend=True
+        )
+
+        return fig, f"Note: Trendline unavailable due to: {str(e)}"
     """
     Analyze the structure of JSON data to help user understand the format
     """
@@ -203,24 +282,29 @@ def main():
                         if df_data:
                             df = pd.DataFrame(df_data)
 
-                            # Scatter plot
+                            # Add download options
+                            st.subheader("💾 Download Data")
+                            col_down1, col_down2 = st.columns(2)
+
+                            with col_down1:
+                                csv_link = create_download_link(
+                                    df, "correlation_data", "csv")
+                                st.markdown(csv_link, unsafe_allow_html=True)
+
+                            with col_down2:
+                                excel_link = create_download_link(
+                                    df, "correlation_data", "excel")
+                                st.markdown(excel_link, unsafe_allow_html=True)
+
+                            # Scatter plot with error handling
                             st.subheader("📈 Visualization")
 
-                            fig = px.scatter(
-                                df,
-                                x=col_a,
-                                y=col_b,
-                                title=f"Scatter Plot: {col_a} vs {col_b}",
-                                trendline="ols"
-                            )
-
-                            fig.update_layout(
-                                xaxis_title=col_a,
-                                yaxis_title=col_b,
-                                showlegend=True
-                            )
-
+                            fig, warning = safe_create_scatter_plot(
+                                df, col_a, col_b, show_trendline=True)
                             st.plotly_chart(fig, use_container_width=True)
+
+                            if warning:
+                                st.warning(warning)
 
                             # Summary statistics
                             st.subheader("📊 Summary Statistics")
