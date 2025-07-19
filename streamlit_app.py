@@ -117,6 +117,23 @@ def safe_create_scatter_plot(df, col_a, col_b, show_trendline=True):
         )
 
         return fig, f"Note: Trendline unavailable due to: {str(e)}"
+
+
+def analyze_json_structure(data):
+    """
+    Analyze the structure of JSON data to help user understand the format
+    """
+    if isinstance(data, list) and len(data) > 0:
+        first_item = data[0]
+        if isinstance(first_item, dict):
+            columns = list(first_item.keys())
+            return True, columns, f"Array of {len(data)} objects"
+        else:
+            return False, [], "Array doesn't contain objects"
+    elif isinstance(data, dict):
+        return False, [], "Root is an object, not an array"
+    else:
+        return False, [], "Invalid JSON structure"
     """
     Analyze the structure of JSON data to help user understand the format
     """
